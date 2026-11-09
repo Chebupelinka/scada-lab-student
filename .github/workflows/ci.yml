@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+      - name: Эмулятор ПЛК (C++)
+        run: |
+          sudo apt-get update && sudo apt-get install -y libmodbus-dev
+          cmake -S plc-emulator -B plc-emulator/build && cmake --build plc-emulator/build
+      - name: Шлюз (Go)
+        working-directory: gateway
+        run: go vet ./... && go test ./...
+
+  e2e:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+      - name: Запуск стенда
+        run: |
+          cp .env.example .env
+          sed -i 's/^PLC_SPEED=1$/PLC_SPEED=10/' .env
+          docker compose up -d --build
+      - name: Проверка стенда
+        run: ./scripts/check.sh
+      - name: Интеграционные тесты шлюза
+        working-directory: gateway
+        env:
+          MODBUS_URL: tcp://localhost:5020
+          DATABASE_URL: postgres://scada:scada@localhost:5432/scada
+        run: go test -count=1 -v ./...
+      - name: Логи
+        if: failure()
+        run: docker compose logs --tail 100

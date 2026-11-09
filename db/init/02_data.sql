@@ -1,0 +1,1 @@
+-- TODO 7: теги reactor_temp, heater_power, cooler_on, gas_alarm и их уставки.
